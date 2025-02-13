@@ -1,34 +1,34 @@
 import time
-import random
 import threading
+from bs4 import BeautifulSoup
+import requests
 import tkinter as tk
 from tkinter import scrolledtext, messagebox
 from docx import Document
-import requests
-from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
 
 def scrape_paginas_amarillas(profesion):
-    """Realiza el scraping en Páginas Amarillas y devuelve una lista de nombres y teléfonos."""
-    url = f"https://www.paginasamarillas.es/search/{profesion}/all-ma/madrid/all-is/espa%C3%B1a/all-ba/all-pu/all-nc/1?what={profesion}&where=espa%C3%B1a&qc=true"
+    """Realiza el scraping en Páginas Amarillas y devuelve una lista de nombres de empresas usando Selenium."""
+    url = f"https://www.paginasamarillas.es/search/{profesion}/all-ma/all-pr/all-is/all-ci/all-ba/all-pu/all-nc/1?what={profesion}&qc=true"
     
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36"
-        }
-        response = requests.get(url, headers=headers)
-        
-        if response.status_code != 200:
-            return [f"Error al obtener datos: Código de estado {response.status_code}"]
+        # Configura el WebDriver
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+        driver.get(url)
+        time.sleep(3)  # Espera que cargue la página
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        
         resultados = []
-        for empresa in soup.select("h2 span[itemprop='name']"):
-            nombre = empresa.get_text(strip=True)
-            telefono = empresa.find_parent("div").find("span", itemprop="telephone")
-            telefono = telefono.get_text(strip=True) if telefono else "No disponible"
-            resultados.append(f"{nombre} - Tel: {telefono}")
+        empresas = driver.find_elements(By.CSS_SELECTOR, "h2 span[itemprop='name']")
         
+        for empresa in empresas:
+            nombre = empresa.text.strip()
+            resultados.append(nombre)
+
+        driver.quit()
+
         return resultados if resultados else ["No se encontraron resultados."]
     
     except Exception as e:
