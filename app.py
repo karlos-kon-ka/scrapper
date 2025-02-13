@@ -8,28 +8,28 @@ import requests
 from bs4 import BeautifulSoup
 
 def scrape_paginas_amarillas(profesion):
-    """Realiza el scraping en Páginas Amarillas y devuelve una lista de resultados."""
+    """Realiza el scraping en Páginas Amarillas y devuelve una lista de nombres y teléfonos."""
     url = f"https://www.paginasamarillas.es/search/{profesion}/all-ma/madrid/all-is/espa%C3%B1a/all-ba/all-pu/all-nc/1?what={profesion}&where=espa%C3%B1a&qc=true"
     
     try:
-        # Hacer la solicitud HTTP
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36"
         }
         response = requests.get(url, headers=headers)
         
-        # Verificar si la solicitud fue exitosa
         if response.status_code != 200:
             return [f"Error al obtener datos: Código de estado {response.status_code}"]
 
-        # Usar BeautifulSoup para parsear el HTML
         soup = BeautifulSoup(response.text, "html.parser")
         
-        # Buscar todos los elementos <h2> que contienen <span itemprop="name">
-        h2_elements = soup.find_all("h2", string=True)
-        h2_textos = [h2.get_text(strip=True) for h2 in h2_elements if h2.find("span", itemprop="name")]
+        resultados = []
+        for empresa in soup.select("h2 span[itemprop='name']"):
+            nombre = empresa.get_text(strip=True)
+            telefono = empresa.find_parent("div").find("span", itemprop="telephone")
+            telefono = telefono.get_text(strip=True) if telefono else "No disponible"
+            resultados.append(f"{nombre} - Tel: {telefono}")
         
-        return h2_textos if h2_textos else ["No se encontraron resultados."]
+        return resultados if resultados else ["No se encontraron resultados."]
     
     except Exception as e:
         return [f"Error al obtener datos: {e}"]
@@ -48,11 +48,9 @@ def guardar_en_word(profesion, datos_paginas_amarillas):
     messagebox.showinfo("Archivo guardado", f"Los resultados se han guardado en {archivo_nombre}")
 
 def ejecutar_busqueda():
-    """Ejecuta la búsqueda en un hilo separado para no bloquear la interfaz."""
     threading.Thread(target=buscar_profesion, daemon=True).start()
 
 def buscar_profesion():
-    """Función que obtiene la profesión, realiza el scraping y actualiza la interfaz."""
     profesion = entrada.get().strip()
     if not profesion:
         messagebox.showwarning("Error", "Introduce una profesión válida.")
@@ -78,7 +76,7 @@ def buscar_profesion():
 # Interfaz gráfica con Tkinter
 root = tk.Tk()
 root.title("Scraper de Páginas Amarillas")
-root.geometry("500x400")
+root.geometry("700x600")
 
 tk.Label(root, text="Introduce una profesión:").pack(pady=5)
 entrada = tk.Entry(root, width=40)
