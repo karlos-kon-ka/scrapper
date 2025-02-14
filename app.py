@@ -19,6 +19,16 @@ def scrape_paginas_amarillas(profesion):
         driver.get(url)
         time.sleep(3)  # Asegúrate de dar tiempo a la página para cargar
 
+        # Intentar cerrar la ventana de cookies si está presente
+        try:
+            cookie_close_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'onetrust-close-btn-handler')]"))
+            )
+            cookie_close_button.click()
+            time.sleep(2)  # Esperamos un poco para asegurarnos de que se cerró
+        except:
+            pass  # Si no se encuentra el botón de cookies, continuamos
+
         resultados = []
         empresas = driver.find_elements(By.CSS_SELECTOR, "h2 span[itemprop='name']")
         direcciones = driver.find_elements(By.CSS_SELECTOR, "a[data-omniclick='route']")
@@ -31,7 +41,7 @@ def scrape_paginas_amarillas(profesion):
 
             if i < len(botones_telefono):
                 try:
-                    # Hacer scroll hasta el botón y hacer clic
+                    # Desplazarse hasta el botón y hacer clic
                     ActionChains(driver).move_to_element(botones_telefono[i]).perform()
                     botones_telefono[i].click()
 
