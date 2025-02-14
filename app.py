@@ -11,7 +11,7 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 
 def scrape_paginas_amarillas(profesion):
-    """Realiza el scraping en Páginas Amarillas y devuelve una lista de nombres de empresas usando Selenium."""
+    """Realiza el scraping en Páginas Amarillas y devuelve una lista con nombres de empresas y ubicaciones usando Selenium."""
     url = f"https://www.paginasamarillas.es/search/{profesion}/all-ma/all-pr/all-is/all-ci/all-ba/all-pu/all-nc/1?what={profesion}&qc=true"
     
     try:
@@ -22,10 +22,21 @@ def scrape_paginas_amarillas(profesion):
 
         resultados = []
         empresas = driver.find_elements(By.CSS_SELECTOR, "h2 span[itemprop='name']")
-        
-        for empresa in empresas:
+        direcciones = driver.find_elements(By.CSS_SELECTOR, "a[data-omniclick='route'] span.location")
+
+        for empresa, direccion in zip(empresas, direcciones):
             nombre = empresa.text.strip()
-            resultados.append(nombre)
+
+            try:
+                street = direccion.find_element(By.CSS_SELECTOR, "span[itemprop='streetAddress']").text.strip()
+                postal_code = direccion.find_element(By.CSS_SELECTOR, "span[itemprop='postalCode']").text.strip()
+                locality = direccion.find_element(By.CSS_SELECTOR, "span[itemprop='addressLocality']").text.strip()
+                region = direccion.find_element(By.CSS_SELECTOR, "span[itemprop='addressRegion']").text.strip()
+                ubicacion = f"{street}, {postal_code}, {locality}, {region}"
+            except:
+                ubicacion = "Ubicación no disponible"
+
+            resultados.append(f"{nombre} - {ubicacion}")
 
         driver.quit()
 
