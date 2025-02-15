@@ -125,7 +125,7 @@ def guardar_en_word(profesion, datos_paginas_amarillas, datos_vulka):
 
 # Interfaz gráfica con Tkinter
 root = tk.Tk()
-root.title("Mauri mi puta")
+root.title("Scraper de Páginas Amarillas y Vulka")
 root.geometry("700x600")
 
 tk.Label(root, text="Introduce una profesión:").pack(pady=5)
