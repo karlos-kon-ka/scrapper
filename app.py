@@ -1,6 +1,5 @@
-import time
+import time 
 import threading
-from docx import Document
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -8,140 +7,190 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import tkinter as tk
-from tkinter import scrolledtext, messagebox
+from tkinter import messagebox
 from selenium.webdriver.common.action_chains import ActionChains
+from openpyxl import Workbook
 
-def scrape_paginas_amarillas(profesion):
-    url = f"https://www.paginasamarillas.es/search/{profesion}/all-ma/all-pr/all-is/all-ci/all-ba/all-pu/all-nc/1?what={profesion}&qc=true"
+def scrape_paginas_amarillas(profesion, ubicacion):
+    pagina = 1
+    resultados = []
 
     try:
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-        driver.get(url)
-        time.sleep(3)  # Asegúrate de dar tiempo a la página para cargar
 
-        # Intentar cerrar la ventana de cookies si está presente
-        try:
-            cookie_close_button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'onetrust-close-btn-handler')]"))
-            )
-            cookie_close_button.click()
-            time.sleep(2)  # Esperamos un poco para asegurarnos de que se cerró
-        except:
-            pass  # Si no se encuentra el botón de cookies, continuamos
+        while True:
+            url = f"https://www.paginasamarillas.es/search/{profesion}/all-ma/{ubicacion}/all-is/{ubicacion}/all-ba/all-pu/all-nc/{pagina}?what={profesion}&where={ubicacion}&qc=true"
+            driver.get(url)
+            time.sleep(3)
 
-        resultados = []
-        empresas = driver.find_elements(By.CSS_SELECTOR, "h2 span[itemprop='name']")
-        direcciones = driver.find_elements(By.CSS_SELECTOR, "a[data-omniclick='route']")
-        botones_telefono = driver.find_elements(By.XPATH, "//div[@data-omniclick='phoneShow']")
+            # Cerrar cookies si aparecen
+            try:
+                cookie_close_button = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'onetrust-close-btn-handler')]"))
+                )
+                cookie_close_button.click()
+                time.sleep(2)
+            except:
+                pass
 
-        for i in range(len(empresas)):
-            nombre = empresas[i].text.strip()
-            direccion = direcciones[i].text.strip() if i < len(direcciones) else "Dirección no encontrada"
-            telefono = "Teléfono no disponible"
+            empresas = driver.find_elements(By.CSS_SELECTOR, "h2 span[itemprop='name']")
+            direcciones = driver.find_elements(By.CSS_SELECTOR, "a[data-omniclick='route']")
+            botones_telefono = driver.find_elements(By.XPATH, "//div[@data-omniclick='phoneShow']")
 
-            if i < len(botones_telefono):
+            # Si no hay empresas, no hay más páginas
+            if not empresas:
+                break
+
+            for i in range(len(empresas)):
+                nombre = empresas[i].text.strip()
+                direccion = direcciones[i].text.strip() if i < len(direcciones) else "Dirección no encontrada"
+                telefono = "Teléfono no disponible"
+
+                if i < len(botones_telefono):
+                    try:
+                        ActionChains(driver).move_to_element(botones_telefono[i]).perform()
+                        botones_telefono[i].click()
+
+                        WebDriverWait(driver, 10).until(
+                            EC.visibility_of_element_located((By.XPATH, "//a[@data-omniclick='phone']/span[@itemprop='telephone']"))
+                        )
+                        telefono_elemento = driver.find_element(By.XPATH, "//a[@data-omniclick='phone']/span[@itemprop='telephone']")
+                        telefono = telefono_elemento.text.strip()
+                    except:
+                        pass
+
+                resultados.append((ubicacion, direccion, nombre, telefono, "Páginas Amarillas"))  # Añadir "Páginas Amarillas" como fuente
+
+            pagina += 1  # Pasar a la siguiente página
+
+        driver.quit()
+        return resultados if resultados else [("No se encontraron resultados.", "", "", "", "")]
+    except Exception as e:
+        return [("Error al obtener datos", str(e), "", "", "")]
+
+
+def scrape_vulka(profesion, ubicacion):
+    pagina = 1
+    resultados = []
+
+    try:
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+        
+        while True:
+            url = f"https://www.vulka.es/resultados.php?qs_wha={profesion}&qs_whe={ubicacion}&pg={pagina}"
+            driver.get(url)
+            time.sleep(3)
+            
+            # Obtener los datos de cada página
+            negocios = driver.find_elements(By.XPATH, "//*[@id='listado']//h3")
+            localizaciones = driver.find_elements(By.XPATH, "//*[@id='listado']//span[@class='localizacion']")
+            telefonos = driver.find_elements(By.XPATH, "//*[@id='listado']//div[@class='infoContacto']")
+            
+            # Si no hay más negocios, se detiene el bucle
+            if not negocios:
+                break
+            
+            # Procesar los resultados de la página
+            for negocio, localizacion, telefono in zip(negocios, localizaciones, telefonos):
+                resultados.append((ubicacion, localizacion.text, negocio.text, telefono.text.strip(), "Vulka"))  # Añadir "Vulka" como fuente
+
+            pagina += 1  # Incrementar el número de página para la siguiente iteración
+        
+        driver.quit()
+        return resultados if resultados else [("No se encontraron resultados.", "", "", "", "")]
+    except Exception as e:
+        return [("Error al obtener datos", str(e), "", "", "")]
+
+
+def scrape_hotfrog(profesion, ubicacion):
+    pagina = 1  # Comienza en la página 1
+    resultados = []
+
+    try:
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+
+        while True:
+            url = f"https://www.hotfrog.es/search/{ubicacion}/{profesion}/{pagina}"
+            driver.get(url)
+            time.sleep(3)
+
+            empresas = driver.find_elements(By.CLASS_NAME, "hf-box")
+
+            # Si no se encuentran empresas, se detiene el bucle (fin de las páginas)
+            if not empresas:
+                break
+
+            # Procesar los resultados de la página
+            for empresa in empresas:
                 try:
-                    # Desplazarse hasta el botón y hacer clic
-                    ActionChains(driver).move_to_element(botones_telefono[i]).perform()
-                    botones_telefono[i].click()
+                    nombre_empresa = empresa.find_element(By.XPATH, ".//h3/a/strong").text.strip()
+                except:
+                    nombre_empresa = "Nombre no disponible"
 
-                    # Aumentar el tiempo de espera para que el teléfono se haga visible
-                    WebDriverWait(driver, 10).until(
-                        EC.visibility_of_element_located((By.XPATH, "//a[@data-omniclick='phone']/span[@itemprop='telephone']"))
-                    )
+                try:
+                    # Buscar el <a> con href que contiene el teléfono
+                    telefono_elemento = empresa.find_element(By.XPATH, ".//a[starts-with(@href, 'tel:')]")
+                    telefono = telefono_elemento.text.strip() if telefono_elemento else "Teléfono no disponible"
+                except:
+                    telefono = "Teléfono no disponible"
 
-                    # Extraer el teléfono del span
-                    telefono_elemento = driver.find_element(By.XPATH, "//a[@data-omniclick='phone']/span[@itemprop='telephone']")
-                    telefono = telefono_elemento.text.strip()
-                except Exception as e:
-                    print(f"No se pudo obtener el teléfono de {nombre}: {e}")
+                direcciones = [d.text.strip() for d in empresa.find_elements(By.XPATH, ".//span[@class='small']") if d.text.strip()]
 
-            resultados.append(f"{nombre} - {direccion} - {telefono}")
+                if nombre_empresa and telefono and direcciones:
+                    for direccion in direcciones:
+                        resultados.append((ubicacion, direccion, nombre_empresa, telefono, "Hotfrog"))  # Añadir "Hotfrog" como fuente
+
+            pagina += 1  # Incrementa el número de página para la siguiente iteración
 
         driver.quit()
-        return resultados if resultados else ["No se encontraron resultados."]
-    
+        return resultados if resultados else [("No se encontraron resultados.", "", "", "", "")]
     except Exception as e:
-        return [f"Error al obtener datos: {e}"]
+        return [("Error al obtener datos", str(e), "", "", "")]
 
-def scrape_vulka(profesion):
-    url = f"https://www.vulka.es/resultados.php?qs_wha={profesion}&qs_whe="
-    
-    try:
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-        driver.get(url)
-        time.sleep(3)  # Dar tiempo para cargar
-        
-        resultados = []
-        
-        # Encontrar todos los <h3> dentro del componente con id="listado"
-        negocios = driver.find_elements(By.XPATH, "//*[@id='listado']//h3")
-        
-        # Encontrar las localizaciones correspondientes a cada negocio
-        localizaciones = driver.find_elements(By.XPATH, "//*[@id='listado']//span[@class='localizacion']")
-        
-        # Encontrar los números de teléfono dentro de <div class="infoContacto">
-        telefonos = driver.find_elements(By.XPATH, "//*[@id='listado']//div[@class='infoContacto']")
-        
-        for negocio, localizacion, telefono in zip(negocios, localizaciones, telefonos):
-            # Añadir nombre del negocio, localización y teléfono
-            resultados.append(f"{negocio.text} - {localizacion.text} - {telefono.text.strip()}")
-        
-        driver.quit()
-        return resultados if resultados else ["No se encontraron resultados."]
-    
-    except Exception as e:
-        return [f"Error al obtener datos: {e}"]
 
-def guardar_en_word(profesion, datos_paginas_amarillas, datos_vulka):
-    doc = Document()
-    doc.add_heading(f"Resultados de búsqueda para {profesion}", level=1)
-    
-    # Resultados de Páginas Amarillas
-    doc.add_heading("Páginas Amarillas:", level=2)
-    for anuncio in datos_paginas_amarillas:
-        parrafo = doc.add_paragraph()
-        partes = anuncio.split(" - ")
-        if len(partes) >= 3:
-            nombre, direccion, telefono = partes[0], partes[1], partes[2]
-        else:
-            nombre = partes[0]
-            direccion = "Dirección no disponible"
-            telefono = "Teléfono no disponible"
-        
-        parrafo.add_run(f"- {nombre}: ").bold = True
-        parrafo.add_run(f"{direccion}").italic = True
-        parrafo.add_run(f" - Teléfono: ").bold = True
-        parrafo.add_run(f"{telefono}").italic = True
+def guardar_en_excel(profesion, ubicacion, datos_paginas_amarillas, datos_vulka, datos_hotfrog):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Resultados"
+    ws.append(["Ciudad", "Dirección", "Empresa", "Teléfono", "Fuente"])  # Añadir columna "Fuente"
 
-    # Resultados de Vulka
-    doc.add_heading("Vulka:", level=2)
-    for anuncio in datos_vulka:
-        doc.add_paragraph(f"- {anuncio}")
-    
-    archivo_nombre = f"resultados_{profesion}.docx"
-    doc.save(archivo_nombre)
+    # Añadir los resultados de cada fuente a la hoja
+    for datos in [datos_paginas_amarillas, datos_vulka, datos_hotfrog]:
+        for ciudad, direccion, nombre, telefono, fuente in datos:
+            ws.append([ciudad, direccion, nombre, telefono, fuente])  # Añadir la fuente correspondiente
+
+    archivo_nombre = f"resultados_{profesion}_{ubicacion}.xlsx"
+    wb.save(archivo_nombre)
     messagebox.showinfo("Archivo guardado", f"Los resultados se han guardado en {archivo_nombre}")
 
-# Interfaz gráfica con Tkinter
+
 root = tk.Tk()
-root.title("Páginas Amarillas y Vulka")
-root.geometry("700x600")
+root.title("Scraper ")
+root.geometry("700x200")
 
 tk.Label(root, text="Introduce una profesión:").pack(pady=5)
-entrada = tk.Entry(root, width=60)
-entrada.pack(pady=5)
+entrada_profesion = tk.Entry(root, width=60)
+entrada_profesion.pack(pady=5)
+
+tk.Label(root, text="Introduce una localización:").pack(pady=5)
+entrada_localizacion = tk.Entry(root, width=60)
+entrada_localizacion.pack(pady=5)
 
 def buscar():
-    profesion = entrada.get()
-    datos_paginas_amarillas = scrape_paginas_amarillas(profesion)
-    datos_vulka = scrape_vulka(profesion)
-    threading.Thread(target=lambda: guardar_en_word(profesion, datos_paginas_amarillas, datos_vulka), daemon=True).start()
+    profesion = entrada_profesion.get()
+    ubicacion = entrada_localizacion.get()
+
+    if not profesion or not ubicacion:
+        messagebox.showerror("Error", "Por favor, ingresa tanto la profesión como la localización.")
+        return
+
+    datos_paginas_amarillas = scrape_paginas_amarillas(profesion, ubicacion)
+    datos_vulka = scrape_vulka(profesion, ubicacion)
+    datos_hotfrog = scrape_hotfrog(profesion, ubicacion)
+
+    threading.Thread(target=lambda: guardar_en_excel(profesion, ubicacion, datos_paginas_amarillas, datos_vulka, datos_hotfrog), daemon=True).start()
 
 boton_buscar = tk.Button(root, text="Buscar", command=buscar)
 boton_buscar.pack(pady=5)
-
-resultado_text = scrolledtext.ScrolledText(root, width=80, height=15, state=tk.DISABLED)
-resultado_text.pack(pady=5)
 
 root.mainloop()
